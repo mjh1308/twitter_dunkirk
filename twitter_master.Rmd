@@ -1,0 +1,85 @@
+---
+title: "Text Mining using Twitter API"
+author: "Matthew Jeremy"
+output:
+  html_document:
+    toc: true
+    toc_float: 
+        collapsed: false
+    highlight: tango
+    theme: cosmo
+  pdf_document:
+    toc: yes
+---
+
+```{r}
+# Clear our global environment
+rm(list=ls())
+
+# Prevent scientific notation (e.g e+04)
+options(scipen = 999)
+```
+
+### Setting Up the Twitter API
+Let us proceed by installing then loading the required packages for this process:
+```{r, message=FALSE}
+# Loading necessary packages 
+library(twitteR)
+
+# Loading libraries used for Word Cloud 
+library(tm)
+library(wordcloud)
+```
+
+```{r}
+# Declare Twitter API Credentials
+api_key <- "ssUNWAB6WN4HHls22KVzwNufn" 
+api_secret <- "pJqaBQgwY0au34jvqYK2dowaFORfyaS0QEDqI6uqQMefipfRjw" 
+token <- "889441925891215362-S6idyANlmTcx32KEa9hsG8RXI2iS28v" 
+token_secret <- "z240epnUVhFFtifaqX3198ZwxxB3fhVDLCUZZgMKib8gt" 
+
+# Create Twitter Connection
+setup_twitter_oauth(api_key, api_secret, token, token_secret)
+```
+
+### Making a Twitter Query
+Let's search for tweets about the recently released Christopher Nolan movie, "Dunkirk," and see what people have been tweeting about. 
+```{r}
+tweets <- searchTwitter("Dunkirk", n=1000, lang="en", since="2017-07-22")
+tweets.df <- twListToDF(tweets) # transforms tweets list into a dataframe
+write.csv(tweets.df, "dunkirk_tweets.csv")
+tweets.df <- read.csv("dunkirk_tweet.csv")
+```
+
+### Creating a Word Cloud
+Before we proceed, the tweets we queried have to be cleaned to avoid insignificant information such as punctuation, white spaces, stop words (i.e. and, the, is), and so forth.
+
+NOTE: A Corpus vector is a medium for storing text more efficiently in the majority of machine learning languages
+```{r}
+tweets.df$text <- sapply(tweets.df$text,function(row) iconv(row, "latin1", "ASCII", sub="")) # removes non-ASCII characters
+tweets.df$text <- gsub("@\\w+", "", tweets.df$text) # replace @UserName
+docs <- Corpus(VectorSource(tweets.df$text)) # creates a Corpus vector
+
+docs <- tm_map(docs, function(x)removeWords(x,stopwords())) # removes stop words
+docs <- tm_map(docs, tolower) # ensures all tweets are converted to lower case letters for consistency
+docs <- tm_map(docs, removeWords, c("dunkirk", "http.+")) # excludes the movie title and website links
+docs <- tm_map(docs, removePunctuation) # ignores punctuation
+docs <- tm_map(docs, stripWhitespace) # skips white spaces in tweets
+```
+
+The next step is to build what is called a Document Term Matrix which lists down the most frequently occuring words in the sample tweets we searched for previously. 
+```{r}
+# Building Document Term Matrix
+dtm <- DocumentTermMatrix(docs)
+mat <- as.matrix(dtm)
+
+v1 <- sort(colSums(mat), decreasing = TRUE) # lists down MOST frequent to LEAST frequent
+d1 <- data.frame(word = names(v1), freq = v1)
+head(d1, 10)
+```
+
+The Document Term Matrix's frequency list enables us to construct a word cloud to portray the significance of certain key words in our "Dunkirk" tweets dataframe. Here is a look:
+```{r, warning=FALSE}
+set.seed(417)
+wordcloud(d1$word, d1$freq, min.freq = 5, max.words = 200, random.order = FALSE, rot.per = 0.40, colors=brewer.pal(8, "Paired"))
+```
